@@ -27,7 +27,7 @@ Open http://127.0.0.1:4173/. `dist/` is both the website source and the Android 
 
 ## GitHub Pages
 
-In repository **Settings → Pages**, choose **GitHub Actions** as the source. Pushes to `main` run `.github/workflows/pages.yml`, validate the source, and publish `dist/`. All application paths are relative, including the service worker, so project URLs such as `/harbour-weather/` work.
+In repository **Settings → Pages**, choose **GitHub Actions** as the source. Pushes to `main` run `.github/workflows/pages.yml`, validate the source, and publish an entry page plus `dist/`. The root entry redirects to `./dist/`, which also supports the repository's initial branch-root publishing setting. All application paths are relative, including the service worker. The website and APK continue to use exactly the same `dist/` assets.
 
 Expected site URL after successful deployment: https://dazzlingfields.github.io/harbour-weather/
 
