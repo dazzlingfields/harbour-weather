@@ -1,0 +1,6 @@
+{
+  "appId": "nz.harbour.weather",
+  "appName": "Harbour",
+  "webDir": "dist",
+  "android": { "backgroundColor": "#f3f6f7" }
+}

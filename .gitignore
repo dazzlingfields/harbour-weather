@@ -1,0 +1,13 @@
+node_modules/
+android/app/src/main/res/mipmap-*/
+android/app/src/main/res/drawable-*/
+android/app/src/main/res/drawable/*.png
+android/.idea/
+.openai/
+*.tar.gz
+*.zip
+.env*
+!.env.example
+local.properties
+*.keystore
+*.jks

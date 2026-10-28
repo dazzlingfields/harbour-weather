@@ -1,0 +1,12 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {normalise,assess,tripWindows,dateKey,clock,direction} from '../dist/forecast.js';
+const limits={wind:15,gust:22,wave:1};
+const good={ts:10000,wind:10,gust:15,wave:.5,code:1,visibility:15000};
+test('missing and null marine values never pass the trip limits',()=>{assert.equal(assess({...good,wave:null},limits).kind,'unknown');assert.equal(assess({...good,wind:undefined},limits).kind,'unknown');assert.equal(assess({...good,code:null},limits).kind,'unknown');});
+test('threshold boundaries pass, excess gusts and storms do not',()=>{assert.equal(assess({...good,wind:15,gust:22,wave:1},limits).kind,'within');assert.equal(assess({...good,gust:22.1},limits).kind,'above');assert.equal(assess({...good,code:95},limits).label,'Thunderstorms');assert.equal(assess({...good,visibility:500},limits).label,'Poor visibility');});
+test('marine and weather join by actual timestamp, not array index',()=>{const rows=normalise({hourly:{time:[100,200,300],wind_speed_10m:[1,2,null]}},{hourly:{time:[200,300],wave_height:[.5,null]}});assert.equal(rows[0].wave,null);assert.equal(rows[1].wave,.5);assert.equal(rows[2].wave,null);assert.equal(rows[2].wind,null);});
+test('partial forecast without marine preserves weather but cannot pass limits',()=>{const rows=normalise({hourly:{time:[100],wind_speed_10m:[4]}},null);assert.equal(rows[0].wind,4);assert.equal(rows[0].wave,null);});
+test('trip windows require contiguous future whole daylight hours',()=>{const rows=Array.from({length:9},(_,i)=>({...good,ts:10000+i*3600}));rows[3].gust=30;rows[6].wave=null;const daily={time:[10000],sunrise:[10000],sunset:[10000+8*3600]};const windows=tripWindows(rows,daily,limits,10000);assert.deepEqual(windows.map(w=>[w.hours,w.start,w.end]),[[3,10000,20800],[2,24400,31600]]);});
+test('a gap in timestamps splits a trip window',()=>{const rows=[0,1,3,4].map(i=>({...good,ts:10000+i*3600}));const daily={time:[10000],sunrise:[10000],sunset:[40000]};assert.deepEqual(tripWindows(rows,daily,limits,10000).map(w=>w.hours),[2,2]);});
+test('New Zealand dates remain independent of device timezone',()=>{const ts=Date.parse('2026-10-28T12:00:00Z')/1000;assert.equal(dateKey(ts),'2026-10-29');assert.match(clock(ts),/1:00/);assert.equal(direction(360),'N');});
