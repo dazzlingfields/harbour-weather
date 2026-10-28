@@ -28,7 +28,7 @@ export async function fetchForecast(spot,signal) {
   if(w.status==='rejected') throw w.reason;
   if(signal.aborted) throw new DOMException('Aborted','AbortError');
   const marine=m.status==='fulfilled'?m.value:null;
-  return {rows:normalise(w.value,marine),daily:w.value.daily,zone:w.value.timezone||'Pacific/Auckland',fetchedAt:Date.now(),marineAvailable:!!marine,grid:marine?{lat:marine.latitude,lon:marine.longitude}:null};
+  return {rows:normalise(w.value,marine),daily:w.value.daily,zone:w.value.timezone||'Pacific/Auckland',fetchedAt:Date.now(),marineAvailable:!!marine,grid:marine?{lat:marine.latitude,lon:marine.longitude}:null,weatherGrid:{lat:w.value.latitude,lon:w.value.longitude},sources:{weather:'Open-Meteo Forecast API',marine:marine?'Open-Meteo Marine API':null,modelSelection:'Provider default / best match; no model pinned'}};
 }
 export async function searchLocations(query,signal) {
   const u=new URL('https://geocoding-api.open-meteo.com/v1/search');

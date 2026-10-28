@@ -79,40 +79,34 @@ export function referenceChart(map,status){
   };
 }
 
-// A user's LDS key stays on their device; never put it in the repository.
-export async function connectLinz(map,key,status){
-  const L=window.L;
-  if(!/^[a-f0-9]{32}$/i.test(key))throw Error('Enter a valid LINZ Data Service key.');
-  const base='https://data.linz.govt.nz/services;key='+key+'/';
-  const response=await fetch(base+'wms?service=WMS&request=GetCapabilities&version=1.1.1',{signal:AbortSignal.timeout(30000)});
-  if(!response.ok)throw Error('LINZ connection failed. Check the key.');
-  const doc=new DOMParser().parseFromString(await response.text(),'application/xml');
-  if(doc.querySelector('parsererror,ServiceException'))throw Error('LINZ did not return a chart catalogue.');
-  const sheets=[];
-  for(const node of doc.getElementsByTagName('Layer')){
-    const child=tag=>Array.from(node.children).find(e=>e.localName===tag);
-    const name=child('Name')?.textContent,title=child('Title')?.textContent,box=child('LatLonBoundingBox');
-    if(!name||!/^Chart NZ /i.test(title||'')||!box)continue;
-    const bounds=[[Number(box.getAttribute('miny')),Number(box.getAttribute('minx'))],[Number(box.getAttribute('maxy')),Number(box.getAttribute('maxx'))]];
-    if(bounds.flat().every(Number.isFinite))sheets.push({name,title,bounds});
-  }
-  if(!sheets.length)throw Error('No LINZ raster chart sheets were returned.');
+// The client only knows the relay URL. Its server holds the LINZ API key.
+export async function connectLinz(map,connection,status){
+  const L=window.L;let url;
+  try{url=new URL(connection);}catch{throw Error('Enter the HTTPS chart connection URL.');}
+  if(url.protocol!=='https:'||url.username||url.password||url.search||url.hash)throw Error('Use an HTTPS connection URL without credentials or query parameters.');
+  const base=url.href.replace(/\/$/,'');
+  let response;try{response=await fetch(base+'/catalogue.json',{signal:AbortSignal.timeout(20000),credentials:'omit'});}catch{throw Error('Chart connection unavailable. Check the URL and internet connection.');}
+  if(!response.ok)throw Error(response.status===429?'Chart request limit reached. Try again shortly.':'Chart connection failed.');
+  const catalogue=await response.json();
+  const sheets=(catalogue.sheets||[]).filter(s=>/^layer-\d+$/.test(s.name)&&typeof s.title==='string'&&Array.isArray(s.bounds)&&s.bounds.length===2&&s.bounds.flat().length===4&&s.bounds.flat().every(Number.isFinite));
+  if(!sheets.length||sheets.length>500)throw Error('The connection returned no valid NZ chart sheets.');
   const layers=new Map();let enabled=false;
   const update=()=>{
     if(!enabled)return;
     const centre=map.getCenter();
     const visible=sheets.filter(s=>L.latLngBounds(s.bounds).contains(centre));
-    visible.sort((a,b)=>L.latLngBounds(b.bounds).getSouthWest().distanceTo(L.latLngBounds(b.bounds).getNorthEast())-L.latLngBounds(a.bounds).getSouthWest().distanceTo(L.latLngBounds(a.bounds).getNorthEast()));
+    visible.sort((a,b)=>(b.scale||1e9)-(a.scale||1e9));
     const wanted=visible.slice(-3),names=new Set(wanted.map(s=>s.name));
-    for(const [name,layer] of layers)if(!names.has(name)){map.removeLayer(layer);layers.delete(name);}
+    for(const [name,layer]of layers)if(!names.has(name)){map.removeLayer(layer);layers.delete(name);}
     for(const sheet of wanted)if(!layers.has(sheet.name)){
-      const layer=L.tileLayer.wms(base+'wms',{layers:sheet.name,format:'image/png',transparent:true,version:'1.1.1',bounds:sheet.bounds,pane:'chartPane',attribution:'Chart images © <a href="https://data.linz.govt.nz/" target="_blank" rel="noopener">LINZ</a> · CC BY 4.0'}).addTo(map);
-      layer.on('tileerror',()=>status('LINZ chart request failed. Check the connection.'));
+      const layer=L.tileLayer(base+'/tiles/'+sheet.name+'/{z}/{x}/{y}.png',{maxZoom:18,minZoom:5,bounds:sheet.bounds,pane:'chartPane',attribution:'Charts © <a href="https://data.linz.govt.nz/" target="_blank" rel="noopener">LINZ</a> · CC BY 4.0'}).addTo(map);
+      layer.on('tileerror',()=>status('Some chart tiles unavailable · retry or use coast map'));
       layers.set(sheet.name,layer);
     }
-    status(wanted.length?'LINZ raster chart imagery · check sheet dates · not for navigation':'No LINZ chart sheet at this position');
+    status(wanted.length?`${wanted.at(-1).title.match(/^Chart NZ [0-9]+/)?.[0]||'LINZ chart'} · reference only, not for navigation`:'No LINZ chart sheet at this position');
   };
   if(!map.getPane('chartPane'))map.createPane('chartPane').style.zIndex=350;
   map.on('moveend zoomend',update);
-  return {show(){enabled=true;update();},hide(){enabled=false;for(const layer of layers.values())map.removeLayer(layer);layers.clear();}};
+  const hide=()=>{enabled=false;for(const layer of layers.values())map.removeLayer(layer);layers.clear();};
+  return {show(){enabled=true;update();},hide,destroy(){hide();map.off('moveend zoomend',update);}};
 }
