@@ -4,14 +4,15 @@ New Zealand boating and fishing weather. A static, mobile-first web app and a Ca
 
 ## Baseline features
 
-- Seven-day weather and marine forecasts from Open-Meteo, with 24/48-hour tables.
+- Hourly forecasts with 3-day (72-hour) and 7-day (168-hour) map views, fixed stat labels, weather icons, date shortcuts and strength colours.
 - Wind, gusts, direction, waves, swell, periods, water temperature, rain, visibility, pressure, UV, daylight and approximate moon phase.
 - Daylight trip windows compared with personal wind, gust and wave limits.
 - Published LINZ high/low tides for 18 ports, covering 2026 and 2027. Select the tide port separately; the nearest port is only a starting point.
-- Full-tab marine map, with the original LINZ NZ 53 Hauraki Gulf reference chart (depth soundings, contours, reefs and chart symbols), optional OpenSeaMap seamarks, coordinate selection, named markers, notes and straight-line distance/bearing. Tap for a bottom weather/tide panel and a scrollable seven-day strip. Popular boating locations and searchable saved marks are included. Mark editing opens in a collapsible panel.
+- Full-tab marine map, with the original LINZ NZ 53 Hauraki Gulf reference chart (depth soundings, contours, reefs and chart symbols), optional OpenSeaMap seamarks, coordinate selection, named markers, notes and straight-line distance/bearing. Tap for a bottom weather/tide sheet with a horizontally scrollable hourly table. Popular boating locations and searchable saved marks are included. Mark editing opens in a collapsible panel.
 - GeoJSON marker import/export, saved forecast spots and local preferences.
 - PWA manifest, app icons, cached application shell and timestamped last-downloaded forecasts.
-- Native Android project, Gradle wrapper, APK build workflow and optional release signing.
+- Android safe areas, compact mobile controls, centred icons, expandable sheets and native Back handling; shared app bundle, APK workflow and optional release signing.
+- Separate wind/weather and wave model selectors; complementary fields retain per-value provenance.
 
 ## Run locally
 
@@ -33,7 +34,7 @@ Expected site URL after successful deployment: https://dazzlingfields.github.io/
 
 ## Android APK
 
-The native project is in `android/`. App ID: `nz.harbour.weather`; version: `0.2.0`, version code `2`. Confirm the app ID before distributing a release; keep it stable for subsequent updates.
+The native project is in `android/`. App ID: `nz.harbour.weather`; version: `0.3.0`, version code `3`. Confirm the app ID before distributing a release; keep it stable for subsequent updates.
 
 **GitHub build:** every relevant push to `main` runs **Build Android APK**. Successful debug builds are published by **Publish Android download** as [GitHub prerelease APK downloads](https://github.com/dazzlingfields/harbour-weather/releases), with SHA-256 checksums. You can also download the `harbour-android-debug` Actions artifact (retained for 30 days). These APKs are intended for testing. A debug build is signed with the runner's temporary debug key; later debug builds may need the previous install removed. Export markers first.
 
@@ -66,10 +67,10 @@ Run **Build Android APK → Run workflow**, enabling the release option. The wor
 
 | Source | Responsibility |
 | --- | --- |
-| `dist/api.js` | Weather/marine requests, location search, coastal presets |
-| `dist/forecast.js` | Forecast alignment, formatting and trip comparisons |
+| `dist/api.js`, `dist/models.js`, `dist/model-controls.js` | Weather/marine requests, explicit model selection, field provenance, search and presets |
+| `dist/forecast.js`, `dist/hourly.js` | Timestamp alignment, supplementary fields, hourly tables, colour scale and trip comparisons |
 | `dist/storage.js` | Device-local persistence; replace here for future native storage |
-| `dist/app.js` | Forecast views and controls |
+| `dist/app.js`, `dist/map-forecast.js`, `dist/forecast-ui.css` | Forecast views, Android layout, bottom sheet and hourly interactions |
 | `dist/tides.js`, `dist/data/` | LINZ port selection and tide events |
 | `dist/map.js`, `dist/geo.js`, `dist/charts.js` | Map, chart providers, markers, distance and bearing |
 | `dist/vendor/` | Bundled Leaflet 1.9.4 and licence |
@@ -86,9 +87,13 @@ Weather and included reference charts need no app login. The default chart conne
 | High/low tide times and heights | Bundled LINZ predictions for 18 ports, 2026–2027 |
 | Marine warnings | External MetService link only; not downloaded |
 
-Requests use the provider's default/best-match models, not a pinned model or MetService forecast. They are model estimates, not live station observations. Weather uses the nearest grid cell, while marine data selects a sea cell; coordinates can differ from the selected point. The visible timestamp is the download time, not the model issue/run time. All displayed times are New Zealand local time. The map panel lists nearby-port tides with station distance; local tides can differ.
+Best match is the default. Named choices pin ECMWF IFS, NOAA GFS or DWD ICON for wind/weather, and ECMWF WAM, NOAA GFS Wave or Météo-France Wave for waves. These forecasts come through one API provider, Open-Meteo; they are not MetService forecasts. They are model estimates, not live station observations. Weather uses the nearest grid cell, while marine data selects a sea cell; coordinates can differ from the selected point. The visible timestamp is the download time, not the model issue/run time. All displayed times are New Zealand local time. Some hourly output is interpolated from coarser native model intervals. The map panel lists nearby-port tides with station distance; local tides can differ.
 
-Tapping the map, a saved mark or a popular location opens its forecast at the bottom. The seven-day cards scroll horizontally; selecting a card shows that day's conditions and port tides. Save/edit opens the named-mark editor. Saved marks have a dedicated searchable panel and GeoJSON backup.
+Only missing supplementary fields are filled from best-match data (swell, sea temperature, currents and visibility). Selected wind, gust and wave values are retained. Each supplemented value records its source; affected rows have an asterisk and the model dialog lists field sources. Missing data still shows a dash. Cache keys include location and both model identifiers; a fresh cache is reused for 15 minutes. A manual Refresh fetches again.
+
+See [free model research, licences and future confidence work](docs/free-weather-models.md). The optional [ECMWF Python availability check](tools/ecmwf/availability.py) uses the official `ecmwf-opendata` client; it is groundwork for a future ingestion service. The APK currently uses the web APIs.
+
+Tapping the map, a saved mark or a popular location opens its forecast at the bottom. The hourly table scrolls horizontally for the next 72 hours by default; the 7-day switch shows up to 168 hours. Date buttons jump to the first hour of a day. Tap an hour, or scroll to another day, to update the associated port tides. More shows additional statistics; expand increases the table space. Save/edit opens the named-mark editor. Saved marks have a dedicated searchable panel and GeoJSON backup.
 
 ## Data maintenance and limits
 

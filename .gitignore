@@ -12,3 +12,8 @@ android/.idea/
 local.properties
 *.keystore
 *.jks
+.venv/
+__pycache__/
+*.pyc
+*.grib
+*.grib2

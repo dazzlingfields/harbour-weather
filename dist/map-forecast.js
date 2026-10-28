@@ -1,49 +1,74 @@
 import {fetchForecast} from './api.js';
-import {read,cachedForecast,cacheForecast} from './storage.js';
-import {dateKey,clock,number,direction,weather,finite,NZ_ZONE} from './forecast.js';
+import {read,write,cachedForecast,cacheForecast,modelSelection,locationKey} from './storage.js';
+import {modelKey} from './models.js';
+import {dateKey,clock,number,NZ_ZONE} from './forecast.js';
 import {nearestStation,distanceKm} from './geo.js';
+import {hourlyTable,forecastHours,dateGroups,dateLabel,escapeHTML as esc} from './hourly.js';
+import {icon} from './icons.js';
 const $=s=>document.querySelector(s);
-const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-let spot,data,tides,day,request=0,controller,timer,loading=false,error='',tideError=false;
-const max=(rows,key)=>{const v=rows.map(r=>r[key]).filter(finite);return v.length?Math.max(...v):null;};
-const speed=n=>number(finite(n)?n*(read('settings',{}).unit==='kmh'?1.852:1):null);
-const unit=()=>read('settings',{}).unit==='kmh'?'km/h':'kn';
-const dayLabel=key=>new Intl.DateTimeFormat('en-NZ',{timeZone:'UTC',weekday:'short',day:'numeric'}).format(new Date(key+'T12:00:00Z'));
+let spot,data,tides,models=modelSelection(),rows=[],request=0,controller,timer,loading=false,error='',tideError=false,selectedHour=null,scrollFrame,pendingScroll=null;
+let range=read('map-forecast-range',72)===168?168:72,more=read('map-forecast-more',false)===true;
 function render(){
-  $('#map-weather-title').textContent=spot.name;
+  const scroll=$('#map-hourly-scroll'),left=pendingScroll??scroll.scrollLeft,top=scroll.scrollTop;
+  $('#map-weather-title').textContent=spot.name;$('#map-weather-title').title=spot.name;
+  if(data)document.dispatchEvent(new CustomEvent('forecast-provenance',{detail:data}));
   $('#map-weather-coordinates').textContent=`${spot.lat.toFixed(4)}, ${spot.lon.toFixed(4)}`;
-  $('#map-weather-state').textContent=loading?'Updating forecast…':error||(data?.marineAvailable?'':'Marine forecast unavailable');
+  $('#map-weather-state').textContent=loading?(data?'Updating…':'Loading forecast…'):error||(data&&!data.marineAvailable?'Wave model unavailable · wind still shown':'');
   const stale=data&&Date.now()-data.fetchedAt>6*3600000;
-  $('#map-weather-source').innerHTML=`<a href="https://open-meteo.com/en/docs" target="_blank" rel="noopener">Open-Meteo</a> · ${data?`${stale?'Saved · ':''}downloaded ${new Intl.DateTimeFormat('en-NZ',{timeZone:NZ_ZONE,day:'numeric',month:'short',hour:'numeric',minute:'2-digit'}).format(data.fetchedAt)}`:'Model forecast'} · NZ time`;
-  if(!data){$('#map-weather-days').innerHTML='';$('#map-weather-detail').textContent='Wind, waves and tides will appear here.';return;}
-  const today=dateKey(Date.now()/1000),keys=[...new Set(data.rows.map(r=>dateKey(r.ts)))].filter(k=>k>=today).slice(0,7);
-  if(!keys.includes(day))day=keys[0];
-  $('#map-weather-days').innerHTML=keys.map(key=>{const rows=data.rows.filter(r=>dateKey(r.ts)===key),mid=rows[Math.floor(rows.length/2)];return `<button class="map-day${key===day?' selected':''}" data-map-day="${key}" aria-pressed="${key===day}"><strong>${esc(dayLabel(key))}</strong><small>${esc(weather(mid?.code).label)}</small><span><b>${speed(max(rows,'wind'))}</b> ${unit()} <small>wind max</small></span><span><b>${number(max(rows,'wave'),1)}</b> m <small>waves max</small></span><small>Gust ${speed(max(rows,'gust'))} ${unit()}</small></button>`;}).join('');
-  renderDetail();
+  $('#map-weather-source').innerHTML=`<a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a>${data?` · ${stale?'saved ':''}${new Intl.DateTimeFormat('en-NZ',{timeZone:NZ_ZONE,day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).format(data.fetchedAt)}`:''}`;
+  document.querySelectorAll('[data-map-range]').forEach(b=>{const active=Number(b.dataset.mapRange)===range;b.classList.toggle('selected',active);b.setAttribute('aria-pressed',String(active));});
+  $('#map-weather-more').setAttribute('aria-pressed',String(more));$('#map-weather-more').textContent=more?'Less':'More';
+  rows=forecastHours(data?.rows||[],range);
+  if(rows.length&&!rows.some(r=>r.ts===selectedHour))selectedHour=rows[0].ts;
+  $('#map-weather-hours').innerHTML=rows.length?hourlyTable(rows,{unit:read('settings',{}).unit,more,selected:selectedHour,interactive:true}):`<p class="empty-state">${loading?'Loading hourly wind and waves…':'No current forecast hours. Refresh to retry.'}</p>`;
+  $('#map-weather-dates').innerHTML=dateGroups(rows).map(g=>`<button data-map-date="${g.index}" aria-pressed="${dateKey(g.ts)===dateKey(selectedHour||Date.now()/1000)}">${esc(dateLabel(g.ts))}</button>`).join('');
+  scroll.scrollLeft=left;scroll.scrollTop=top;if(rows.length)pendingScroll=null;renderTide();
 }
-function renderDetail(){
-  const now=Date.now()/1000,rows=data.rows.filter(r=>dateKey(r.ts)===day),r=day===dateKey(now)?rows.find(r=>r.ts>=now)||rows.at(-1):rows[Math.floor(rows.length/2)];
-  if(!r){$('#map-weather-detail').textContent='Forecast unavailable for this day.';return;}
-  const events=tides?.events.filter(e=>dateKey(e[0])===day)||[];
-  const tideText=tides?`LINZ ${esc(tides.station.name)} port (${Math.round(distanceKm(spot,tides.station))} km): ${events.length?events.map(e=>`${e[2]==='H'?'High':'Low'} ${clock(e[0])} ${number(e[1],1)} m`).join(' · '):'No table for this date'}`:tideError?'Nearby tide table unavailable · check LINZ':'Loading nearby port tides…';
-  $('#map-weather-detail').innerHTML=`<span><b>${esc(dayLabel(day))} · ${clock(r.ts)}</b> · ${direction(r.dir)} ${speed(r.wind)} ${unit()} · gust ${speed(r.gust)} · waves ${number(r.wave,1)} m / ${number(r.period)} s · swell ${number(r.swell,1)} m · rain ${number(r.rain)}%</span><span class="map-tide-line">${tideText}</span>`;
+function renderTide(){
+  const day=dateKey(selectedHour||Date.now()/1000),events=tides?.byDay.get(day)||[];
+  $('#map-weather-detail').innerHTML=tides?`<div class="map-tide-heading"><span>LINZ ${esc(tides.station.name)} · ${Math.round(distanceKm(spot,tides.station))} km · ${esc(dateLabel(selectedHour||Date.now()/1000))}</span><button class="text-button" data-map-tides>Port tides ↗</button></div><div class="map-tide-events">${events.length?events.map(e=>`<span><b>${e[2]==='H'?'High':'Low'}</b> ${clock(e[0])} · ${number(e[1],1)} m</span>`).join(''):'No published tide table for this day.'}</div>`:`<span class="map-tide-pending">${tideError?'Nearby tide table unavailable':'Loading nearby port tides…'}</span>`;
+  $('#map-weather-dates').querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',String(dateKey(rows[Number(b.dataset.mapDate)]?.ts||0)===day)));
+}
+function highlightHour(index){
+  const r=rows[index];if(!r||r.ts===selectedHour)return;const previousDay=dateKey(selectedHour||r.ts);selectedHour=r.ts;
+  $('#map-weather-hours').querySelectorAll('.selected-hour').forEach(e=>e.classList.remove('selected-hour'));
+  $('#map-weather-hours').querySelectorAll('.hourly-weather,tbody tr').forEach(tr=>tr.children[index+1]?.classList.add('selected-hour'));
+  $('#map-weather-hours').querySelectorAll('[data-hour]').forEach(b=>b.setAttribute('aria-pressed',String(Number(b.dataset.hour)===selectedHour)));if(dateKey(selectedHour)!==previousDay)renderTide();
 }
 async function loadPort(p,id){
-  try{const index=await fetch('./data/tides-index.json').then(r=>r.json());const station=nearestStation(p,index.stations);const year=Number(dateKey(Date.now()/1000).slice(0,4));const files=[year,year+1].filter(y=>station.files[y]);const tables=await Promise.all(files.map(y=>fetch('./data/'+station.files[y]).then(r=>{if(!r.ok)throw Error();return r.json();})));if(id!==request)return;tides={station,events:tables.flatMap(t=>t.events).sort((a,b)=>a[0]-b[0])};if(data)renderDetail();}
-  catch{if(id===request){tides=null;tideError=true;if(data)renderDetail();}}
+    try{const index=await fetch('./data/tides-index.json').then(r=>{if(!r.ok)throw Error();return r.json();});const station=nearestStation(p,index.stations);const year=Number(dateKey(Date.now()/1000).slice(0,4));const tables=await Promise.all([year,year+1].filter(y=>station.files[y]).map(y=>fetch('./data/'+station.files[y]).then(r=>{if(!r.ok)throw Error();return r.json();})));if(id!==request)return;const byDay=new Map();for(const event of tables.flatMap(t=>t.events).sort((a,b)=>a[0]-b[0])){const key=dateKey(event[0]);if(!byDay.has(key))byDay.set(key,[]);byDay.get(key).push(event);}tides={station,byDay};renderTide();}
+  catch{if(id===request){tides=null;tideError=true;renderTide();}}
 }
+function setCollapsed(collapsed){$('#map-weather').classList.toggle('collapsed',collapsed);$('#map-weather-collapse').setAttribute('aria-expanded',String(!collapsed));$('#map-weather-collapse').setAttribute('aria-label',collapsed?'Show forecast':'Minimise forecast');}
 export function initMapForecast(save,full){
-  $('#map-weather-save').addEventListener('click',save);
-  $('#map-weather-full').addEventListener('click',()=>spot&&full(spot));
+  $('#map-weather-save').addEventListener('click',save);$('#map-weather-full').addEventListener('click',()=>spot&&full(spot));
   $('#map-weather-close').addEventListener('click',()=>{$('#map-weather').hidden=true;});
-  $('#map-weather-collapse').addEventListener('click',e=>{const collapsed=$('#map-weather').classList.toggle('collapsed');e.currentTarget.setAttribute('aria-expanded',String(!collapsed));e.currentTarget.textContent=collapsed?'Expand':'Minimise';});
-  $('#map-weather-days').addEventListener('click',e=>{const b=e.target.closest('[data-map-day]');if(!b)return;day=b.dataset.mapDay;$('#map-weather-days').querySelectorAll('button').forEach(el=>{el.classList.toggle('selected',el===b);el.setAttribute('aria-pressed',String(el===b));});renderDetail();});
+  $('#map-weather-collapse').addEventListener('click',()=>setCollapsed(!$('#map-weather').classList.contains('collapsed')));
+  $('#map-weather-expand').addEventListener('click',()=>{setCollapsed(false);const expanded=$('#map-weather').classList.toggle('is-expanded');$('#map-weather-expand').setAttribute('aria-pressed',String(expanded));$('#map-weather-expand').setAttribute('aria-label',expanded?'Reduce forecast panel':'Expand forecast panel');});
+  const title=$('#map-weather-title').parentElement;let dragStart;
+  title.addEventListener('pointerdown',e=>{dragStart=e.clientY;title.setPointerCapture(e.pointerId);});
+  title.addEventListener('pointerup',e=>{if(dragStart===undefined)return;const delta=e.clientY-dragStart;dragStart=undefined;if(delta< -40){setCollapsed(false);if(!$('#map-weather').classList.contains('is-expanded'))$('#map-weather-expand').click();}else if(delta>40){if($('#map-weather').classList.contains('is-expanded'))$('#map-weather-expand').click();else setCollapsed(true);}});
+  document.querySelectorAll('[data-map-range]').forEach(b=>b.addEventListener('click',()=>{range=Number(b.dataset.mapRange);write('map-forecast-range',range);selectedHour=null;pendingScroll=0;render();}));
+  $('#map-weather-more').addEventListener('click',()=>{more=!more;write('map-forecast-more',more);render();});
+  $('#map-weather-refresh').addEventListener('click',()=>showMapForecast(spot,{preserve:true,force:true}));
+  $('#forecast-key-open').addEventListener('click',()=>$('#forecast-key-dialog').showModal());
+  $('#map-weather-hours').addEventListener('click',e=>{const b=e.target.closest('[data-hour]');if(b)highlightHour(rows.findIndex(r=>r.ts===Number(b.dataset.hour)));});
+  $('#map-weather-dates').addEventListener('click',e=>{const b=e.target.closest('[data-map-date]');if(!b)return;const index=Number(b.dataset.mapDate),cell=$('.hourly-weather th[data-hour-col]');if(cell){$('#map-hourly-scroll').scrollTo({left:index*cell.getBoundingClientRect().width,behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'});highlightHour(index);}});
+  $('#map-hourly-scroll').addEventListener('scroll',()=>{cancelAnimationFrame(scrollFrame);scrollFrame=requestAnimationFrame(()=>{const cell=$('#map-weather-hours .hourly-weather th[data-hour-col]');if(cell)highlightHour(Math.min(rows.length-1,Math.round($('#map-hourly-scroll').scrollLeft/cell.getBoundingClientRect().width)));});},{passive:true});
+  $('#map-weather-detail').addEventListener('click',e=>{if(e.target.closest('[data-map-tides]'))document.dispatchEvent(new CustomEvent('open-map-tides'));});
+  document.addEventListener('forecast-models-change',()=>{if(spot&&!$('#view-map').hidden)showMapForecast(spot,{preserve:true});});
+  document.addEventListener('preferences-change',()=>{if(spot)render();});
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden&&spot&&!$('#view-map').hidden)showMapForecast(spot,{preserve:true});});
 }
-export function showMapForecast(p){
-  spot=p;const id=++request;controller?.abort();clearTimeout(timer);data=cachedForecast(p);tides=null;tideError=false;day=null;loading=true;error='';$('#map-weather').hidden=false;render();$('#map-weather-days').scrollLeft=0;loadPort(p,id);
-  timer=setTimeout(async()=>{const abort=new AbortController();controller=abort;const timeout=setTimeout(()=>abort.abort(),25000);
-    try{const fresh=await fetchForecast(p,abort.signal);if(id!==request)return;data=fresh;cacheForecast(p,fresh);}
-    catch(e){if(id!==request)return;error=data?'Offline or unavailable · saved forecast shown':e.name==='AbortError'?'Forecast timed out · tap again to retry':e.message;}
+export function syncMapForecast(){if(!spot)return;if(modelKey(models)!==modelKey(modelSelection()))showMapForecast(spot,{preserve:true});else render();}
+export function showMapForecast(p,{preserve=false,force=false}={}){
+  if(!p)return;const same=spot&&locationKey(spot)===locationKey(p);if(preserve&&same)pendingScroll=$('#map-hourly-scroll').scrollLeft;spot=p;models=modelSelection();const id=++request;controller?.abort();clearTimeout(timer);data=cachedForecast(p,models);error='';
+  if(!preserve||!same){tides=null;tideError=false;selectedHour=null;pendingScroll=0;$('#map-hourly-scroll').scrollLeft=0;$('#map-hourly-scroll').scrollTop=0;setCollapsed(false);}
+  loading=force||!data||Date.now()-data.fetchedAt>15*60000;$('#map-weather').hidden=false;render();if(!tides)loadPort(p,id);
+  if(!loading)return;
+  const selection={...models};timer=setTimeout(async()=>{const abort=new AbortController();controller=abort;const timeout=setTimeout(()=>abort.abort(),25000);
+    try{const fresh=await fetchForecast(p,abort.signal,selection);if(id!==request)return;data=fresh;cacheForecast(p,fresh);}
+    catch(e){if(id!==request)return;error=data?'Connection unavailable · saved forecast shown':e.name==='AbortError'?'Forecast timed out · tap refresh to retry':e.message;}
     finally{clearTimeout(timeout);if(id===request){loading=false;render();}}
-  },350);
+  },300);
 }

@@ -1,8 +1,5 @@
 name: Publish Android download
 on:
-  push:
-    branches: [main]
-    paths: ['.github/workflows/publish-apk.yml']
   workflow_run:
     workflows: [Build Android APK]
     types: [completed]
@@ -70,7 +67,12 @@ jobs:
           mkdir -p release
           cp "$apk" "release/harbour-${version}-debug.apk"
           (cd release && sha256sum "harbour-${version}-debug.apk" > SHA256SUMS.txt)
-          printf 'Installable Android test build.\n\nIncludes the marine chart map, saved marks, seven-day forecast panel and LINZ port tides. Chart credentials stay on the server; internet is required for forecasts and online charts.\n\nThis APK uses a debug signing key. It is for testing, not Play Store distribution. A previous debug installation may need to be removed; export saved marks first.\n\nBuilt from `%s` in [Android build %s](https://github.com/%s/actions/runs/%s).\n' "$SOURCE_SHA" "$SOURCE_RUN" "$REPO" "$SOURCE_RUN" > "$RUNNER_TEMP/release-notes.md"
+          if [ -f "docs/releases/v$version.md" ]; then
+            cp "docs/releases/v$version.md" "$RUNNER_TEMP/release-notes.md"
+          else
+            printf 'Installable Android test build. Debug signing is intended for testing. Export saved marks before removing an earlier test installation.\n' > "$RUNNER_TEMP/release-notes.md"
+          fi
+          printf '\nBuilt from `%s` in [Android build %s](https://github.com/%s/actions/runs/%s).\n' "$SOURCE_SHA" "$SOURCE_RUN" "$REPO" "$SOURCE_RUN" >> "$RUNNER_TEMP/release-notes.md"
           if gh release view "$tag" --repo "$REPO" >/dev/null 2>&1; then
             gh release upload "$tag" release/* --repo "$REPO" --clobber
             gh release edit "$tag" --repo "$REPO" --notes-file "$RUNNER_TEMP/release-notes.md"

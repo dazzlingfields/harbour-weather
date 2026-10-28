@@ -1,11 +1,11 @@
 import {SPOTS} from './api.js';
 import {read,write,locationKey} from './storage.js';
 import {distanceKm,bearing,validNZ} from './geo.js';
-import {initMapForecast,showMapForecast} from './map-forecast.js';
+import {initMapForecast,showMapForecast,syncMapForecast} from './map-forecast.js';
 import {DEFAULT_CHART_RELAY} from './config.js';
 import {referenceChart,connectLinz} from './charts.js';
 const $=s=>document.querySelector(s);
-let map,selected,selectionMarker,forecastMarker,marksLayer,measureLayer,measureStart,measuring=false,onForecast,marks=read('marks',[]),editingId=null,toast;
+let onSelect,map,selected,selectionMarker,forecastMarker,marksLayer,measureLayer,measureStart,measuring=false,onForecast,marks=read('marks',[]),editingId=null,toast;
 let reference,linz,chartMode='charts',lastForecastKey,connecting=false,initialConnection=true;
 const chartStatus=message=>{$('#map-status').textContent=message;};
 function panel(open){$('#map-sidebar').classList.toggle('is-open',open);$('#map-sidebar').inert=!open;$('#map-panel-toggle').setAttribute('aria-expanded',String(open));}
@@ -20,9 +20,9 @@ async function changeChart(mode){
   chartMode=mode;$('#map-layer').value=mode;reference.hide();linz?.hide();
   if(mode==='charts')reference.show();else if(mode==='linz')linz.show();else chartStatus('Coast map · no depth chart');
 }
-const textIcon=(label,color)=>window.L.divIcon({className:'map-point',html:`<span style="background:${color}">${label}</span>`,iconSize:[26,26],iconAnchor:[13,13]});
+const textIcon=(label,color)=>window.L.divIcon({className:'map-point',html:`<span style="background:${color}">${label}</span>`,iconSize:[44,44],iconAnchor:[22,22]});
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-function choose(spot,id=null){selected=spot;editingId=id;$('#mark-name').value=id?spot.name:'';$('#mark-notes').value=spot.notes||'';$('#map-lat').value=spot.lat.toFixed(5);$('#map-lon').value=spot.lon.toFixed(5);$('#map-selected').textContent=`${spot.lat.toFixed(5)}, ${spot.lon.toFixed(5)}`;$('#map-save').textContent=id?'Update mark':'Save mark';$('#map-delete').hidden=!id;if(selectionMarker)selectionMarker.remove();selectionMarker=window.L.marker([spot.lat,spot.lon],{icon:textIcon('+','#c48632'),keyboard:false}).addTo(map);showMapForecast(spot);requestAnimationFrame(()=>{if(selected!==spot)return;const height=Math.max(300,document.querySelector('#map-weather').getBoundingClientRect().height);map.panInside([spot.lat,spot.lon],{paddingTopLeft:[20,100],paddingBottomRight:[20,Math.min(height+30,map.getSize().y*.52)],animate:false});});}
+function choose(spot,id=null){$('#map-tools').open=false;onSelect?.(spot);selected=spot;editingId=id;$('#mark-name').value=id?spot.name:'';$('#mark-notes').value=spot.notes||'';$('#map-lat').value=spot.lat.toFixed(5);$('#map-lon').value=spot.lon.toFixed(5);$('#map-selected').textContent=`${spot.lat.toFixed(5)}, ${spot.lon.toFixed(5)}`;$('#map-save').textContent=id?'Update mark':'Save mark';$('#map-delete').hidden=!id;if(selectionMarker)selectionMarker.remove();selectionMarker=window.L.marker([spot.lat,spot.lon],{icon:textIcon('+','#c48632'),keyboard:false}).addTo(map);showMapForecast(spot);requestAnimationFrame(()=>{if(selected!==spot)return;const height=document.querySelector('#map-weather').getBoundingClientRect().height;map.panInside([spot.lat,spot.lon],{paddingTopLeft:[15,95],paddingBottomRight:[15,Math.min(height+38,map.getSize().y*.65)],animate:false});});}
 function renderMarks(){
   marksLayer.clearLayers();
   marks.forEach((s,i)=>window.L.marker([s.lat,s.lon],{icon:textIcon(String(i+1),'#286f64'),title:s.name}).addTo(marksLayer).on('click',()=>{choose(s,s.id);map.panTo([s.lat,s.lon]);panel(false);}));
@@ -30,8 +30,8 @@ function renderMarks(){
   $('#map-marks').innerHTML=visible.length?visible.map((s,i)=>`<button class="saved-mark" data-mark="${esc(s.id)}"><span>${i+1}</span><div><strong>${esc(s.name)}</strong><small>${s.lat.toFixed(4)}, ${s.lon.toFixed(4)}</small></div><span>↗</span></button>`).join(''):'<p class="section-note">'+(marks.length?'No matches.':'Tap the map, then Save / edit.')+'</p>';
 }
 function persist(){if(!write('marks',marks))toast('Storage unavailable. Export your marks before leaving.');renderMarks();}
-export function openMap(spot,forecastHandler,notify){
-  onForecast=forecastHandler;toast=notify;
+export function openMap(spot,forecastHandler,notify,selectionHandler){
+  onForecast=forecastHandler;toast=notify;onSelect=selectionHandler;
   if(!window.L){$('#marine-map').textContent='Map library unavailable. Refresh to retry.';return;}
   if(!map){
     map=window.L.map('marine-map',{zoomControl:true,minZoom:5,maxZoom:18,maxBounds:[[-50,164],[-32,181]],maxBoundsViscosity:.6}).setView([spot.lat,spot.lon],11);
@@ -45,6 +45,7 @@ export function openMap(spot,forecastHandler,notify){
     $('#map-chart-area').addEventListener('click',()=>{changeChart('charts');reference.fit();});
     $('#map-find').addEventListener('click',()=>$('#location-button').click());
     $('#map-connection').addEventListener('click',()=>{$('#chart-url').value=read('chart-relay',DEFAULT_CHART_RELAY);$('#chart-dialog').showModal();});
+    $('#map-tools').addEventListener('click',e=>{if(e.target.closest('button'))$('#map-tools').open=false;});
     $('#map-panel-toggle').addEventListener('click',()=>panel(!$('#map-sidebar').classList.contains('is-open')));
     $('#map-panel-close').addEventListener('click',()=>{panel(false);$('#map-panel-toggle').focus();});
     $('#map-sidebar').addEventListener('keydown',e=>{if(e.key==='Escape'){$('#map-panel-close').click();e.stopPropagation();}});
@@ -84,6 +85,6 @@ export function openMap(spot,forecastHandler,notify){
   if(forecastMarker)forecastMarker.remove();forecastMarker=window.L.circleMarker([spot.lat,spot.lon],{radius:11,color:'#265a6b',weight:2,fill:false}).addTo(map).bindTooltip('Forecast: '+esc(spot.name));
   map.invalidateSize();
   if(lastForecastKey!==locationKey(spot)){choose(spot);map.panTo([spot.lat,spot.lon]);lastForecastKey=locationKey(spot);}
-  renderMarks();
+  renderMarks();syncMapForecast();
   if(initialConnection){initialConnection=false;if(read('chart-relay',DEFAULT_CHART_RELAY))changeChart('linz');}
 }
