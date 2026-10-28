@@ -106,13 +106,13 @@ function renderFishing(){const r=current()||{},d=state.data?.daily,i=todayIndex(
 function render(){renderSpot();renderStatus();renderCurrent();renderHourly();renderWindows();renderSun();renderDays();renderFishing();$('#location-date').textContent=new Intl.DateTimeFormat('en-NZ',{timeZone:NZ_ZONE,weekday:'long',day:'numeric',month:'long'}).format(new Date());if(state.data?.grid)$('#grid-info').textContent=`Marine model grid: ${state.data.grid.lat.toFixed(3)}, ${state.data.grid.lon.toFixed(3)}. Selected spot: ${state.spot.lat.toFixed(3)}, ${state.spot.lon.toFixed(3)}. These can differ by several kilometres.`;}
 async function load(spot=state.spot){
   state.controller?.abort();const controller=new AbortController();state.controller=controller;
-  state.spot=spot;write('spot',spot);state.data=cachedForecast(spot);state.offline=!navigator.onLine;state.error=null;state.loading=true;state.day=null;render();loadTides(spot);$('#refresh-button').disabled=true;
+  state.spot=spot;write('spot',spot);state.data=cachedForecast(spot);state.offline=!navigator.onLine;state.error=null;state.loading=true;state.day=null;render();loadTides(spot);if(state.view==='map')view('map');$('#refresh-button').disabled=true;
   const timeout=setTimeout(()=>controller.abort(),25000);
   try{const data=await fetchForecast(spot,controller.signal);if(state.controller!==controller)return;state.data=data;state.offline=false;if(!cacheForecast(spot,data))toast('Forecast loaded. Device storage is full or unavailable.');}
   catch(e){if(state.controller!==controller)return;state.offline=!navigator.onLine;state.error=e.name==='AbortError'?'Forecast request timed out. Try Refresh.':e.message;}
   finally{clearTimeout(timeout);if(state.controller===controller){state.loading=false;$('#refresh-button').disabled=false;render();}}
 }
-function view(name){state.view=name;document.querySelectorAll('.view').forEach(e=>e.hidden=e.id!==`view-${name}`);document.querySelectorAll('[data-view]').forEach(e=>{const active=e.dataset.view===name;e.classList.toggle('active',active);if(active)e.setAttribute('aria-current','page');else e.removeAttribute('aria-current');});if(name==='map')openMap(state.spot,spot=>{view('overview');load(spot);},toast);}
+function view(name){state.view=name;document.body.classList.toggle('map-mode',name==='map');document.querySelectorAll('.view').forEach(e=>e.hidden=e.id!==`view-${name}`);document.querySelectorAll('[data-view]').forEach(e=>{const active=e.dataset.view===name;e.classList.toggle('active',active);if(active)e.setAttribute('aria-current','page');else e.removeAttribute('aria-current');});if(name==='map')openMap(state.spot,spot=>{view('overview');load(spot);},toast);}
 document.querySelectorAll('[data-view]').forEach(e=>e.addEventListener('click',()=>view(e.dataset.view)));
 document.querySelectorAll('.close-dialog').forEach(e=>e.addEventListener('click',()=>e.closest('dialog').close()));
 document.querySelectorAll('dialog').forEach(d=>d.addEventListener('click',e=>{const r=d.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)d.close();}));

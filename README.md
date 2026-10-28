@@ -8,7 +8,7 @@ New Zealand boating and fishing weather. A static, mobile-first web app and a Ca
 - Wind, gusts, direction, waves, swell, periods, water temperature, rain, visibility, pressure, UV, daylight and approximate moon phase.
 - Daylight trip windows compared with personal wind, gust and wave limits.
 - Published LINZ high/low tides for 18 ports, covering 2026 and 2027. Select the tide port separately; the nearest port is only a starting point.
-- Interactive marine planning map: OpenStreetMap base, OpenSeaMap seamarks, coordinate selection, named markers, notes and straight-line distance/bearing.
+- Full-tab marine map, with the original LINZ NZ 53 Hauraki Gulf reference chart (depth soundings, contours, reefs and chart symbols), optional OpenSeaMap seamarks, coordinate selection, named markers, notes and straight-line distance/bearing. Mark editing opens in a collapsible panel.
 - GeoJSON marker import/export, saved forecast spots and local preferences.
 - PWA manifest, app icons, cached application shell and timestamped last-downloaded forecasts.
 - Native Android project, Gradle wrapper, APK build workflow and optional release signing.
@@ -71,21 +71,23 @@ Run **Build Android APK → Run workflow**, enabling the release option. The wor
 | `dist/storage.js` | Device-local persistence; replace here for future native storage |
 | `dist/app.js` | Forecast views and controls |
 | `dist/tides.js`, `dist/data/` | LINZ port selection and tide events |
-| `dist/map.js`, `dist/geo.js` | Map, markers, distance and bearing |
+| `dist/map.js`, `dist/geo.js`, `dist/charts.js` | Map, chart providers, markers, distance and bearing |
 | `dist/vendor/` | Bundled Leaflet 1.9.4 and licence |
 | `capacitor.config.json`, `android/` | Native wrapper and signing configuration |
 
-No backend, API keys, location permission or user accounts are required. Only Android internet permission is used. Marks are device-local; GeoJSON transfers them between browser and APK. There is no automatic cloud sync. Native export copies GeoJSON to the clipboard with a selectable-text fallback.
+The baseline weather and included reference chart need no account or API key. Other LINZ chart sheets require a free user-supplied LINZ Data Service key, entered through **Marine map → Map layer → Connect LINZ charts**. It stays in local device storage and is never sent to this site's host or committed. The LDS connection code is prepared but has not been validated against a user's key. Only Android internet permission is used. Marks are device-local; GeoJSON transfers them between browser and APK. There is no automatic cloud sync. Native export copies GeoJSON to the clipboard with a selectable-text fallback.
 
 ## Data maintenance and limits
 
 - Weather/marine: [Open-Meteo](https://open-meteo.com/), [marine documentation](https://open-meteo.com/en/docs/marine-weather-api), [licences](https://open-meteo.com/en/licence). Model data, not observations. Partial data remains missing; unknown values never pass the trip filters. Last-downloaded forecasts are labelled offline/stale; trip suggestions are disabled when stale.
 - Tides: [Toitū Te Whenua LINZ published predictions](https://www.linz.govt.nz/products-services/tides-and-tidal-streams/tide-predictions), CC BY 4.0. Each bundled table records its source CSV and constituent reference. Local time includes daylight saving; heights are above the port chart datum. The app transforms the supplied extrema without interpolating a continuous tide curve. Nearest-port distances are geographical, not a claim that a port represents another harbour. Weather effects and local offsets are not applied. Downloaded predictions are not official tide tables for statutory navigation.
 - Update tides deliberately with `node scripts/update-tides.mjs 2026 2027` (internet required), review changed data, test, and commit. Add future years before expiry. Do not silently extrapolate beyond supplied tables.
-- Marine map: [OpenStreetMap](https://www.openstreetmap.org/copyright) and [OpenSeaMap](https://www.openseamap.org/). Community seamarks have incomplete coverage and no authoritative depth chart layer. Distance measurements do not avoid land or hazards. This is a planning map, not an electronic chart plotter. Use current [LINZ charts](https://charts.linz.govt.nz/) for navigation. Map tiles are fetched only for the displayed viewport, never predownloaded for offline use.
+- Reference chart: [LINZ NZ 53, Bream Head to Slipper Island including Hauraki Gulf / Tīkapa Moana](https://data.linz.govt.nz/layer/51247-chart-nz-53-bream-head-to-slipper-island-including-hauraki-gulf-tikapa-moana/), CC BY 4.0, compilation scale 1:200,000. The source KML reports data updated **13 January 2022**, downloaded **18 April 2023**. It is a dated reference chart, not a current or corrected ENC. Its date and use restriction remain visible on the map. The archive is publicly hosted at [ArcGIS item c7f9914885b84b409226cdeeb6108fc4](https://www.arcgis.com/home/item.html?id=c7f9914885b84b409226cdeeb6108fc4), with original LINZ provenance and licence inside. The app verifies its SHA-256 before decoding, ignores embedded HTML, and retains each image's KML geographic bounds. Approximately 10 MB downloads on first use; subsequent visits reuse the device cache where available. Only visible chart images are mounted and decoded. The chart is not bundled in the APK; first use needs internet. This key-free layer covers the included NZ 53 extent only. Outside it, the app explicitly reports the coverage gap and shows the coast map.
+- Other chart sheets: [LINZ LDS web service documentation](https://www.linz.govt.nz/guidance/data-service/linz-data-service-guide/map-tile-services/lds-web-map-tile-service-specifications). An LDS key enables a device-local WMS chart catalogue connection. This does not make downloaded raster imagery a current navigational ENC or verify chart corrections.
+- Background map: [OpenStreetMap](https://www.openstreetmap.org/copyright) and optional [OpenSeaMap](https://www.openseamap.org/). Distance measurements do not avoid land or hazards. Use current [LINZ charts](https://charts.linz.govt.nz/) for navigation. Background tiles are fetched only for the displayed viewport, never predownloaded for offline use.
 - Official weather warnings, fishing rules and navigational notices are external links; they are not ingested or checked automatically. An absence of an app alert does not mean no warnings exist.
 - Before a public/commercial launch, confirm provider quotas/terms, chart licensing, privacy copy, API resilience and native device behaviour. No advertising or analytics is included.
 
 ## Next development
 
-Authoritative chart integration and depth coverage; official warning ingestion; additional tide stations and reviewed secondary-port offsets; native device testing and release signing; optional cross-device sync; radar and model comparison. These are future work, not enabled baseline features.
+Current nationwide ENC integration and verified chart corrections; validating additional LDS sheets with a user's key; official warning ingestion; additional tide stations and reviewed secondary-port offsets; native device testing and release signing; optional cross-device sync; radar and model comparison. These are future work, not enabled baseline features.
