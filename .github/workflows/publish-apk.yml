@@ -1,0 +1,79 @@
+name: Publish Android download
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/publish-apk.yml']
+  workflow_run:
+    workflows: [Build Android APK]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: Successful Android build run ID (blank uses latest)
+        required: false
+        type: string
+permissions:
+  contents: write
+  actions: read
+concurrency:
+  group: publish-android-download
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      REPO: ${{ github.repository }}
+    steps:
+      - name: Select and verify successful main build
+        id: source
+        env:
+          REQUESTED_RUN: ${{ github.event.workflow_run.id || inputs.run_id }}
+        run: |
+          set -euo pipefail
+          run_id="$REQUESTED_RUN"
+          if [ -z "$run_id" ]; then
+            run_id=$(gh api "repos/$REPO/actions/workflows/android.yml/runs?branch=main&status=success&per_page=1" --jq '.workflow_runs[0].id')
+          fi
+          [[ "$run_id" =~ ^[0-9]+$ ]]
+          gh api "repos/$REPO/actions/runs/$run_id" > "$RUNNER_TEMP/build.json"
+          jq -e --arg repo "$REPO" '.conclusion == "success" and .head_branch == "main" and .head_repository.full_name == $repo and .name == "Build Android APK"' "$RUNNER_TEMP/build.json"
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+          echo "sha=$(jq -r .head_sha "$RUNNER_TEMP/build.json")" >> "$GITHUB_OUTPUT"
+          artifact=$(gh api "repos/$REPO/actions/runs/$run_id/artifacts" --jq '.artifacts[] | select(.name == "harbour-android-debug" and .expired == false) | .name')
+          echo "artifact=$artifact" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v4
+        if: ${{ steps.source.outputs.artifact != '' }}
+        with:
+          ref: ${{ steps.source.outputs.sha }}
+      - uses: actions/download-artifact@v4
+        if: ${{ steps.source.outputs.artifact != '' }}
+        with:
+          name: harbour-android-debug
+          run-id: ${{ steps.source.outputs.run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: downloaded
+      - name: Publish installable APK and checksum
+        if: ${{ steps.source.outputs.artifact != '' }}
+        env:
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+          SOURCE_RUN: ${{ steps.source.outputs.run_id }}
+        run: |
+          set -euo pipefail
+          version=$(node -p 'JSON.parse(require("fs").readFileSync("package.json","utf8")).version')
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          tag="android-v${version}-test"
+          apk=$(find downloaded -name app-debug.apk -type f -print -quit)
+          test -n "$apk"
+          mkdir -p release
+          cp "$apk" "release/harbour-${version}-debug.apk"
+          (cd release && sha256sum "harbour-${version}-debug.apk" > SHA256SUMS.txt)
+          printf 'Installable Android test build.\n\nIncludes the marine chart map, saved marks, seven-day forecast panel and LINZ port tides. Chart credentials stay on the server; internet is required for forecasts and online charts.\n\nThis APK uses a debug signing key. It is for testing, not Play Store distribution. A previous debug installation may need to be removed; export saved marks first.\n\nBuilt from `%s` in [Android build %s](https://github.com/%s/actions/runs/%s).\n' "$SOURCE_SHA" "$SOURCE_RUN" "$REPO" "$SOURCE_RUN" > "$RUNNER_TEMP/release-notes.md"
+          if gh release view "$tag" --repo "$REPO" >/dev/null 2>&1; then
+            gh release upload "$tag" release/* --repo "$REPO" --clobber
+            gh release edit "$tag" --repo "$REPO" --notes-file "$RUNNER_TEMP/release-notes.md"
+          else
+            gh release create "$tag" release/* --repo "$REPO" --target "$SOURCE_SHA" --prerelease --title "Harbour $version — Android test APK" --notes-file "$RUNNER_TEMP/release-notes.md"
+          fi

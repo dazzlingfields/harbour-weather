@@ -35,7 +35,7 @@ Expected site URL after successful deployment: https://dazzlingfields.github.io/
 
 The native project is in `android/`. App ID: `nz.harbour.weather`; version: `0.2.0`, version code `2`. Confirm the app ID before distributing a release; keep it stable for subsequent updates.
 
-**GitHub build:** every relevant push to `main` runs **Build Android APK**. Open its successful Actions run and download the `harbour-android-debug` artifact. It contains `app-debug.apk`, intended for testing. GitHub retains artifacts for 30 days. A debug build is signed with the runner's temporary debug key; later debug builds may need the previous install removed. Export markers first.
+**GitHub build:** every relevant push to `main` runs **Build Android APK**. Successful debug builds are published by **Publish Android download** as [GitHub prerelease APK downloads](https://github.com/dazzlingfields/harbour-weather/releases), with SHA-256 checksums. You can also download the `harbour-android-debug` Actions artifact (retained for 30 days). These APKs are intended for testing. A debug build is signed with the runner's temporary debug key; later debug builds may need the previous install removed. Export markers first.
 
 **Local build:** install Node 22+, pnpm 11.25.0, JDK 21 and Android Studio with Android SDK 36. Then:
 
