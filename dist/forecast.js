@@ -21,7 +21,8 @@ export function assess(row, limits) {
   if (!known || !finite(row.code) || !finite(row.visibility)) return {kind:'unknown', label:'Incomplete data'};
   if (row.code >= 95) return {kind:'above', label:'Thunderstorms'};
   if (row.visibility < 1000) return {kind:'above',label:'Poor visibility'};
-  if (row.wind > limits.wind || row.gust > limits.gust || row.wave > limits.wave) return {kind:'above',label:'Above your limits'};
+  if (['wind','gust','wave'].some(k=>(row.blend?.fields?.[k]?.max??row[k])>limits[k])) return {kind:'above',label:row.blend?'A model exceeds your limits':'Above your limits'};
+  if (row.blend && (!finite(row.blend.score)||row.blend.score<50)) return {kind:'unknown',label:'Low forecast confidence'};
   return {kind:'within',label:'Within your limits'};
 }
 export function normalise(weatherData, marineData) {
@@ -42,7 +43,7 @@ export function supplementRows(rows,extra,fields,source){
 }
 export function tripWindows(rows, daily, limits, now = Date.now()/1000) {
   const windows=[]; let group=[];
-  const flush=()=>{if(group.length>=2) windows.push({start:group[0].ts,end:group.at(-1).ts+3600,wind:Math.max(...group.map(r=>r.wind)),wave:Math.max(...group.map(r=>r.wave)),hours:group.length});group=[];};
+  const flush=()=>{if(group.length>=2) windows.push({start:group[0].ts,end:group.at(-1).ts+3600,wind:Math.max(...group.map(r=>r.blend?.fields?.wind?.max??r.wind)),wave:Math.max(...group.map(r=>r.blend?.fields?.wave?.max??r.wave)),hours:group.length});group=[];};
   const daylight = (daily?.time || []).map((_,i)=>[daily.sunrise?.[i],daily.sunset?.[i]]);
   for (const r of rows) {
     const lit = daylight.some(([a,b])=>finite(a)&&finite(b)&&r.ts>=a&&r.ts+3600<=b);

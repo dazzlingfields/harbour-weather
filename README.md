@@ -12,7 +12,9 @@ New Zealand boating and fishing weather. A static, mobile-first web app and a Ca
 - GeoJSON marker import/export, saved forecast spots and local preferences.
 - PWA manifest, app icons, cached application shell and timestamped last-downloaded forecasts.
 - Android safe areas, compact mobile controls, centred icons, expandable sheets and native Back handling; shared app bundle, APK workflow and optional release signing.
-- Separate wind/weather and wave model selectors; complementary fields retain per-value provenance.
+- Harbour Blend is the default: robust averages of three weather and three wave models, circular direction means, full member ranges and per-hour confidence from agreement, coverage and lead time. Confidence is a heuristic index, not a calibrated accuracy probability. Best-match supplementary values never count as additional members.
+- One-tap model presets, optional separate weather/wave choices, and trip windows that use upper member estimates and exclude low confidence hours.
+- Full-screen map with floating controls and a compact forecast strip. Bounded dialogs, narrow phone/tablet/landscape layouts, and animations that respect reduced motion.
 
 ## Run locally
 
@@ -34,7 +36,7 @@ Expected site URL after successful deployment: https://dazzlingfields.github.io/
 
 ## Android APK
 
-The native project is in `android/`. App ID: `nz.harbour.weather`; version: `0.3.0`, version code `3`. Confirm the app ID before distributing a release; keep it stable for subsequent updates.
+The native project is in `android/`. App ID: `nz.harbour.weather`; version: `0.4.0`, version code `4`. Confirm the app ID before distributing a release; keep it stable for subsequent updates.
 
 **GitHub build:** every relevant push to `main` runs **Build Android APK**. Successful debug builds are published by **Publish Android download** as [GitHub prerelease APK downloads](https://github.com/dazzlingfields/harbour-weather/releases), with SHA-256 checksums. You can also download the `harbour-android-debug` Actions artifact (retained for 30 days). These APKs are intended for testing. A debug build is signed with the runner's temporary debug key; later debug builds may need the previous install removed. Export markers first.
 

@@ -48,7 +48,7 @@ On Windows, use `.venv\Scripts\python.exe`. The availability check uses the publ
 
 ## Confidence work for a later release
 
-Keep native issue/run times separately from download times. Add ensemble members and a reviewed set of NZ station/buoy observations. Verify reliability by location, lead time and variable before assigning probabilities. Shared model ancestry, wind-driven wave products and best-match reuse create correlated errors; counting agreeing models would overstate confidence. Model spread can be displayed as disagreement, but should not be labelled a calibrated confidence percentage without validation. No confidence score is generated in this release.
+Keep native issue/run times separately from download times. Add ensemble members and a reviewed set of NZ station/buoy observations. Verify reliability by location, lead time and variable before assigning probabilities. Shared model ancestry, wind-driven wave products and best-match reuse create correlated errors; counting agreeing models would overstate confidence. Model spread can be displayed as disagreement, but should not be labelled a calibrated confidence percentage without validation. Version 0.4.0 adds Harbour Blend, which displays High/Medium/Low agreement confidence and an explicitly uncalibrated 0–100 index. It uses equal initial weights with Huber outlier influence for scalar values and circular means for directions. Model ranges are preserved and the confidence index penalizes spread, missing members and lead time. These are heuristic design choices, not observation-validated probabilities; calibration against NZ observations remains future work.
 
 ## Primary sources
 
