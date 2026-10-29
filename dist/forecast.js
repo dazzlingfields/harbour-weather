@@ -22,7 +22,12 @@ export function assess(row, limits) {
   if (row.code >= 95) return {kind:'above', label:'Thunderstorms'};
   if (row.visibility < 1000) return {kind:'above',label:'Poor visibility'};
   if (['wind','gust','wave'].some(k=>(row.blend?.fields?.[k]?.max??row[k])>limits[k])) return {kind:'above',label:row.blend?'A model exceeds your limits':'Above your limits'};
-  if (row.blend && (!finite(row.blend.score)||row.blend.score<50)) return {kind:'unknown',label:'Low forecast confidence'};
+  if(row.visibility<(limits.minVisibility??1000))return {kind:'above',label:'Visibility below your limit'};
+  for(const [limit,key,minimum,label]of [['swell','swell',false,'Swell above your limit'],['minPeriod','period',true,'Wave period below your limit'],['maxRain','rain',false,'Rain chance above your limit']]){
+    if(!finite(limits[limit]))continue;if(!finite(row[key]))return {kind:'unknown',label:'Missing '+key+' data'};
+    const value=row.blend?.fields?.[key]?.[minimum?'min':'max']??row[key];if(minimum?value<limits[limit]:value>limits[limit])return {kind:'above',label};
+  }
+  if (row.blend && (!finite(row.blend.score)||row.blend.score<(limits.minConfidence??50))) return {kind:'unknown',label:'Confidence below your limit'};
   return {kind:'within',label:'Within your limits'};
 }
 export function normalise(weatherData, marineData) {
@@ -43,11 +48,11 @@ export function supplementRows(rows,extra,fields,source){
 }
 export function tripWindows(rows, daily, limits, now = Date.now()/1000) {
   const windows=[]; let group=[];
-  const flush=()=>{if(group.length>=2) windows.push({start:group[0].ts,end:group.at(-1).ts+3600,wind:Math.max(...group.map(r=>r.blend?.fields?.wind?.max??r.wind)),wave:Math.max(...group.map(r=>r.blend?.fields?.wave?.max??r.wave)),hours:group.length});group=[];};
+  const flush=()=>{if(group.length>=(limits.minHours??2)) windows.push({start:group[0].ts,end:group.at(-1).ts+3600,wind:Math.max(...group.map(r=>r.blend?.fields?.wind?.max??r.wind)),wave:Math.max(...group.map(r=>r.blend?.fields?.wave?.max??r.wave)),hours:group.length});group=[];};
   const daylight = (daily?.time || []).map((_,i)=>[daily.sunrise?.[i],daily.sunset?.[i]]);
   for (const r of rows) {
     const lit = daylight.some(([a,b])=>finite(a)&&finite(b)&&r.ts>=a&&r.ts+3600<=b);
-    if (r.ts>=now && r.ts<now+72*3600 && lit && assess(r,limits).kind==='within') {
+    if (r.ts>=now && r.ts+3600<=now+(limits.horizon??72)*3600 && (limits.daylightOnly===false||lit) && assess(r,limits).kind==='within') {
       if(group.length && r.ts-group.at(-1).ts!==3600) flush();
       group.push(r);
     } else flush();

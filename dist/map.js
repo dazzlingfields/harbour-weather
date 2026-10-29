@@ -2,6 +2,7 @@ import {SPOTS} from './api.js';
 import {read,write,locationKey} from './storage.js';
 import {distanceKm,bearing,validNZ} from './geo.js';
 import {initMapForecast,showMapForecast,syncMapForecast} from './map-forecast.js';
+import {quantity,displayValue,unitLabel,canonicalValue} from './units.js';
 import {DEFAULT_CHART_RELAY} from './config.js';
 import {referenceChart,connectLinz} from './charts.js';
 const $=s=>document.querySelector(s);
@@ -64,12 +65,12 @@ export function openMap(spot,forecastHandler,notify,selectionHandler){
       finally{connecting=false;}
     });
     $('#linz-forget').addEventListener('click',()=>{write('chart-relay',null);linz?.destroy();linz=null;$('#chart-url').value=DEFAULT_CHART_RELAY;$('#linz-status').textContent='Default connection selected.';changeChart(DEFAULT_CHART_RELAY?'linz':'charts');});
-    window.L.control.scale({imperial:false}).addTo(map);marksLayer=window.L.layerGroup().addTo(map);measureLayer=window.L.layerGroup().addTo(map);
+    const scale=window.L.control({position:'bottomleft'});let scaleNode;scale.onAdd=()=>{scaleNode=window.L.DomUtil.create('div','map-scale');return scaleNode;};scale.addTo(map);const updateScale=()=>{const settings=read('settings',{}),size=map.getSize(),km=map.distance(map.containerPointToLatLng([0,size.y/2]),map.containerPointToLatLng([90,size.y/2]))/1000,raw=displayValue(km,'distance',settings);if(!raw||!scaleNode)return;const power=10**Math.floor(Math.log10(raw)),n=[1,2,5,10].filter(n=>n*power<=raw).at(-1)||1,value=n*power;scaleNode.style.width=Math.max(25,90*value/raw)+'px';scaleNode.textContent=value+' '+unitLabel('distance',settings);};map.on('moveend zoomend resize',updateScale);document.addEventListener('preferences-change',updateScale);updateScale();marksLayer=window.L.layerGroup().addTo(map);measureLayer=window.L.layerGroup().addTo(map);
     SPOTS.forEach(s=>window.L.circleMarker([s.lat,s.lon],{radius:5,color:'#215e67',weight:2,fillColor:'#fff',fillOpacity:1}).addTo(map).bindTooltip(s.name).on('click',e=>{window.L.DomEvent.stopPropagation(e);choose(s);}));
     map.on('click',e=>{
       const p={lat:e.latlng.lat,lon:e.latlng.lng,name:'Map spot',area:'New Zealand'};
       if(!validNZ(p.lat,p.lon)){toast('Select a point in New Zealand coastal waters.');return;}
-      if(measuring){if(!measureStart){measureStart=p;measureLayer.clearLayers();window.L.circleMarker([p.lat,p.lon],{radius:5,color:'#b76c25'}).addTo(measureLayer);$('#map-measure-result').textContent='Select the second point.';}else{const nm=distanceKm(measureStart,p)/1.852,deg=bearing(measureStart,p);window.L.polyline([[measureStart.lat,measureStart.lon],[p.lat,p.lon]],{color:'#b76c25',dashArray:'5 6'}).addTo(measureLayer);$('#map-measure-result').textContent=`${nm.toFixed(2)} nm · initial bearing ${Math.round(deg)}° true`;measureStart=null;}}else choose(p);
+      if(measuring){if(!measureStart){measureStart=p;measureLayer.clearLayers();window.L.circleMarker([p.lat,p.lon],{radius:5,color:'#b76c25'}).addTo(measureLayer);$('#map-measure-result').textContent='Select the second point.';}else{const km=distanceKm(measureStart,p),deg=bearing(measureStart,p);window.L.polyline([[measureStart.lat,measureStart.lon],[p.lat,p.lon]],{color:'#b76c25',dashArray:'5 6'}).addTo(measureLayer);$('#map-measure-result').textContent=`${quantity(km,'distance',read('settings',{}),2)} · initial bearing ${Math.round(deg)}° true`;measureStart=null;}}else choose(p);
     });
     $('#map-centre').addEventListener('click',()=>{const p=map.getCenter();choose({lat:p.lat,lon:p.lng,name:'Map spot',area:'New Zealand'});});
     $('#map-home').addEventListener('click',()=>map.fitBounds([[-47.5,166],[-34,179]]));

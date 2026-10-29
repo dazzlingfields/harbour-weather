@@ -5,6 +5,7 @@ import {dateKey,clock,number,NZ_ZONE} from './forecast.js';
 import {nearestStation,distanceKm} from './geo.js';
 import {hourlyTable,forecastHours,dateGroups,dateLabel,speedValue,speedUnit,escapeHTML as esc} from './hourly.js';
 import {icon} from './icons.js';
+import {quantity} from './units.js';
 const $=s=>document.querySelector(s);
 let spot,data,tides,models=modelSelection(),rows=[],request=0,controller,timer,loading=false,error='',tideError=false,selectedHour=null,scrollFrame,pendingScroll=null;
 let range=read('map-forecast-range',72)===168?168:72,more=read('map-forecast-more',false)===true;
@@ -20,19 +21,19 @@ function render(){
   $('#map-weather-more').setAttribute('aria-pressed',String(more));$('#map-weather-more').textContent=more?'Less':'More';
   rows=forecastHours(data?.rows||[],range);
   if(rows.length&&!rows.some(r=>r.ts===selectedHour))selectedHour=rows[0].ts;
-  const peek=rows.find(r=>r.ts===selectedHour);$('#map-weather-peek').textContent=peek?`Wind ${speedValue(peek.wind,read('settings',{}).unit)} ${speedUnit(read('settings',{}).unit)} · waves ${number(peek.wave,1)} m`:loading?'Loading forecast…':'Tap to open forecast';
-  $('#map-weather-hours').innerHTML=rows.length?hourlyTable(rows,{unit:read('settings',{}).unit,more,selected:selectedHour,interactive:true}):`<p class="empty-state">${loading?'Loading hourly wind and waves…':'No current forecast hours. Refresh to retry.'}</p>`;
+  const peek=rows.find(r=>r.ts===selectedHour);$('#map-weather-peek').textContent=peek?`Wind ${speedValue(peek.wind,read('settings',{}).unit)} ${speedUnit(read('settings',{}).unit)} · waves ${quantity(peek.wave,'height',read('settings',{}))}`:loading?'Loading forecast…':'Tap to open forecast';
+  $('#map-weather-hours').innerHTML=rows.length?hourlyTable(rows,{settings:read('settings',{}),more,selected:selectedHour,interactive:true}):`<p class="empty-state">${loading?'Loading hourly wind and waves…':'No current forecast hours. Refresh to retry.'}</p>`;
   $('#map-weather-dates').innerHTML=dateGroups(rows).map(g=>`<button data-map-date="${g.index}" aria-pressed="${dateKey(g.ts)===dateKey(selectedHour||Date.now()/1000)}">${esc(dateLabel(g.ts))}</button>`).join('');
   scroll.scrollLeft=left;scroll.scrollTop=top;if(rows.length)pendingScroll=null;renderTide();document.dispatchEvent(new CustomEvent('forecast-hour-change',{detail:rows.find(r=>r.ts===selectedHour)}));
 }
 function renderTide(){
   const day=dateKey(selectedHour||Date.now()/1000),events=tides?.byDay.get(day)||[];
-  $('#map-weather-detail').innerHTML=tides?`<div class="map-tide-heading"><span>LINZ ${esc(tides.station.name)} · ${Math.round(distanceKm(spot,tides.station))} km · ${esc(dateLabel(selectedHour||Date.now()/1000))}</span><button class="text-button" data-map-tides>Port tides ↗</button></div><div class="map-tide-events">${events.length?events.map(e=>`<span><b>${e[2]==='H'?'High':'Low'}</b> ${clock(e[0])} · ${number(e[1],1)} m</span>`).join(''):'No published tide table for this day.'}</div>`:`<span class="map-tide-pending">${tideError?'Nearby tide table unavailable':'Loading nearby port tides…'}</span>`;
+  $('#map-weather-detail').innerHTML=tides?`<div class="map-tide-heading"><span>LINZ ${esc(tides.station.name)} · ${quantity(distanceKm(spot,tides.station),'distance',read('settings',{}))} · ${esc(dateLabel(selectedHour||Date.now()/1000))}</span><button class="text-button" data-map-tides>Port tides ↗</button></div><div class="map-tide-events">${events.length?events.map(e=>`<span><b>${e[2]==='H'?'High':'Low'}</b> ${clock(e[0])} · ${quantity(e[1],'height',read('settings',{}))}</span>`).join(''):'No published tide table for this day.'}</div>`:`<span class="map-tide-pending">${tideError?'Nearby tide table unavailable':'Loading nearby port tides…'}</span>`;
   $('#map-weather-dates').querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',String(dateKey(rows[Number(b.dataset.mapDate)]?.ts||0)===day)));
 }
 function highlightHour(index){
   const r=rows[index];if(!r||r.ts===selectedHour)return;const previousDay=dateKey(selectedHour||r.ts);selectedHour=r.ts;document.dispatchEvent(new CustomEvent('forecast-hour-change',{detail:r}));
-  $('#map-weather-peek').textContent=`Wind ${speedValue(r.wind,read('settings',{}).unit)} ${speedUnit(read('settings',{}).unit)} · waves ${number(r.wave,1)} m`;
+  $('#map-weather-peek').textContent=`Wind ${speedValue(r.wind,read('settings',{}).unit)} ${speedUnit(read('settings',{}).unit)} · waves ${quantity(r.wave,'height',read('settings',{}))}`;
   $('#map-weather-hours').querySelectorAll('.selected-hour').forEach(e=>e.classList.remove('selected-hour'));
   $('#map-weather-hours').querySelectorAll('.hourly-weather,tbody tr').forEach(tr=>tr.children[index+1]?.classList.add('selected-hour'));
   $('#map-weather-hours').querySelectorAll('[data-hour]').forEach(b=>b.setAttribute('aria-pressed',String(Number(b.dataset.hour)===selectedHour)));if(dateKey(selectedHour)!==previousDay)renderTide();

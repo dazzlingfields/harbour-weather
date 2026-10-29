@@ -2,6 +2,7 @@ import {WEATHER_MODELS,WAVE_MODELS,selectedModels,normaliseModels} from './model
 import {modelSelection,write,read} from './storage.js';
 import {finite,number} from './forecast.js';
 import {confidenceLevel} from './blend.js';
+import {formatValue,unitLabel} from './units.js';
 let latest,selectedRow;
 const $=s=>document.querySelector(s);
 const presets={blend:{weather:'blend',wave:'blend'},ecmwf:{weather:'ecmwf_ifs',wave:'ecmwf_wam'},gfs:{weather:'gfs_global',wave:'ncep_gfswave025'},icon:{weather:'icon_global',wave:'meteofrance_wave'}};
@@ -16,9 +17,8 @@ function confidence(){
   if(!latest){text.textContent='Confidence appears when the forecast loads.';$('#blend-ranges').replaceChildren();return;}
   const s=latest.sources,count=`Weather ${s.weatherMembers?.length||0}/${s.expectedWeather||1} · waves ${s.waveMembers?.length||0}/${s.expectedWaves||1} models`;
   text.textContent=(finite(score)?`${scope}${confidenceLevel(score)} · ${score}/100 confidence index. `:'Insufficient model coverage for a confidence index. ')+count+(stale?'. Saved forecast · refresh to reassess.':'');
-  const fields=row?.blend?.fields||{},unitValue=read('settings',{}).unit;
-  const factor=unitValue==='kmh'?1.852:unitValue==='ms'?.514444:1,unit=unitValue==='kmh'?'km/h':unitValue==='ms'?'m/s':'kn';
-  $('#blend-ranges').replaceChildren(...[['wind','Wind',unit,factor],['gust','Gusts',unit,factor],['wave','Waves','m',1]].map(([key,label,suffix,scale])=>{const p=document.createElement('p'),f=fields[key];p.textContent=f?.count?`${label}: ${number(f.min*scale,key==='wave'?1:0)}–${number(f.max*scale,key==='wave'?1:0)} ${suffix} · ${f.count} model${f.count===1?'':'s'}`:`${label}: single model or unavailable`;return p;}));
+  const fields=row?.blend?.fields||{},settings=read('settings',{});
+  $('#blend-ranges').replaceChildren(...[['wind','Wind','speed'],['gust','Gusts','speed'],['wave','Waves','height']].map(([key,label,kind])=>{const p=document.createElement('p'),f=fields[key];p.textContent=f?.count?`${label}: ${formatValue(f.min,kind,settings)}–${formatValue(f.max,kind,settings)} ${unitLabel(kind,settings)} · ${f.count} model${f.count===1?'':'s'}`:`${label}: single model or unavailable`;return p;}));
 }
 function fieldSources(){const target=$('#model-field-sources');target.replaceChildren();if(!latest?.sources){target.textContent='Load a forecast to see its field sources.';return;}const s=latest.sources,extra=new Set(s.supplementedFields||[]);for(const [label,source]of [['Wind & gusts',s.weather],['Waves',s.marine||'Unavailable'],['Swell',extra.has('swell')?'Marine best match':s.marine||'Unavailable'],['Water & currents',extra.has('water')||extra.has('current')?'Marine best match':s.marine||'Unavailable'],['Visibility',extra.has('visibility')?'Weather best match':s.weather],['Weather members',(s.weatherMembers||[]).join(', ')||s.weather],['Wave members',(s.waveMembers||[]).join(', ')||s.marine||'Unavailable']]){const p=document.createElement('p');p.textContent=label+': '+source;target.append(p);}}
 function apply(selection){write('forecast-models-v2',normaliseModels(selection));latest=null;selectedRow=null;$('#models-dialog').close();summaries();confidence();document.dispatchEvent(new CustomEvent('forecast-models-change',{detail:selection}));}

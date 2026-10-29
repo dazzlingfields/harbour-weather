@@ -1,20 +1,22 @@
 import {nearestStation,distanceKm} from './geo.js';
 import {read,write,locationKey} from './storage.js';
 import {dateKey,clock,number} from './forecast.js';
+import {quantity,formatValue,unitLabel} from './units.js';
 let indexPromise,loadId=0,currentSpot,currentEvents=[],station,selectedDay;
 const $=s=>document.querySelector(s);
 export async function tideIndex(){return indexPromise??=fetch('./data/tides-index.json').then(r=>{if(!r.ok)throw Error('Tide index unavailable');return r.json();}).catch(e=>{indexPromise=null;throw e;});}
 const dayName=key=>new Intl.DateTimeFormat('en-NZ',{timeZone:'UTC',weekday:'short',day:'numeric',month:'short'}).format(new Date(key+'T12:00:00Z'));
 export function renderTides(){
   if(!station)return;
-  const now=Date.now()/1000,next=currentEvents.find(e=>e[0]>=now),distance=Math.round(distanceKm(currentSpot,station));
-  $('#tide-port-note').textContent=`${station.name} port · ${distance} km from forecast spot. Local tides can differ.`;
-  $('#tide-next').innerHTML=next?`<span>Next ${next[2]==='H'?'high':'low'} · ${station.name}</span><strong>${clock(next[0])} <small>${number(next[1],1)} m</small></strong>`:'<span>No current tide table</span><strong>Refresh data</strong>';
+  const note=document.querySelector('#tide-height-note');if(note)note.textContent=`Port predictions · ${unitLabel('height',read('settings',{}))} above chart datum · NZ local time.`;
+  const now=Date.now()/1000,next=currentEvents.find(e=>e[0]>=now),settings=read('settings',{}),distance=quantity(distanceKm(currentSpot,station),'distance',settings);
+  $('#tide-port-note').textContent=`${station.name} port · ${distance} from forecast spot. Local tides can differ.`;
+  $('#tide-next').innerHTML=next?`<span>Next ${next[2]==='H'?'high':'low'} · ${station.name}</span><strong>${clock(next[0])} <small>${quantity(next[1],'height',settings)}</small></strong>`:'<span>No current tide table</span><strong>Refresh data</strong>';
   const start=Date.now()/1000;const days=Array.from({length:7},(_,i)=>dateKey(start+i*86400));
   if(!days.includes(selectedDay))selectedDay=days[0];
   $('#tide-day').innerHTML=days.map(d=>`<option value="${d}"${d===selectedDay?' selected':''}>${dayName(d)}</option>`).join('');
   const events=currentEvents.filter(e=>dateKey(e[0])===selectedDay);
-  $('#tide-events').innerHTML=events.length?events.map(e=>`<div class="tide-event ${e[2]==='H'?'high':'low'}"><span>${e[2]==='H'?'↟ High':'↡ Low'}</span><strong>${clock(e[0])}</strong><b>${number(e[1],1)} <small>m</small></b></div>`).join(''):'<p class="empty-state">No published predictions for this date.</p>';
+  $('#tide-events').innerHTML=events.length?events.map(e=>`<div class="tide-event ${e[2]==='H'?'high':'low'}"><span>${e[2]==='H'?'↟ High':'↡ Low'}</span><strong>${clock(e[0])}</strong><b>${formatValue(e[1],'height',settings)} <small>${unitLabel('height',settings)}</small></b></div>`).join(''):'<p class="empty-state">No published predictions for this date.</p>';
   $('#tide-source').href=station.files?.[Number(selectedDay.slice(0,4))]?`https://static.charts.linz.govt.nz/tide-tables/maj-ports/csv/${encodeURIComponent(station.name+' '+selectedDay.slice(0,4))}.csv`:'https://www.linz.govt.nz/products-services/tides-and-tidal-streams/tide-predictions';
 }
 async function selectStation(id){

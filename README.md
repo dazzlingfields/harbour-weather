@@ -16,6 +16,12 @@ New Zealand boating and fishing weather. A static, mobile-first web app and a Ca
 - One-tap model presets, optional separate weather/wave choices, and trip windows that use upper member estimates and exclude low confidence hours.
 - Full-screen map with floating controls and a compact forecast strip. Bounded dialogs, narrow phone/tablet/landscape layouts, and animations that respect reduced motion.
 
+## Interface and planning
+
+The overview uses a wind-first instrument layout, a 24/48-hour trend and a trip form. Use **Plan trip** beside the model selector to jump to it. Leaving times use New Zealand local time; duration can be 0.5–72 hours. Trip summaries include overlapping model hours, conservative gust/wave peaks, confidence, coverage and daylight flags. Detailed rows scroll inside the trip popup.
+
+The Forecast tab uses seven fixed-width day choices and a vertical hourly list; choosing an hour opens a complete forecast. Settings has separate Units and Trip limits tabs. Speeds, heights, temperatures, distances, pressure and rainfall are converted for display while limits stay in canonical units. Optional swell/period/rain/visibility/confidence filters and window length/daylight/horizon controls affect trip matching. Map options also opens Units & limits and Weather models.
+
 ## Run locally
 
 Node 22+ is recommended. The website itself has no build step or runtime package dependency.
@@ -36,7 +42,7 @@ Expected site URL after successful deployment: https://dazzlingfields.github.io/
 
 ## Android APK
 
-The native project is in `android/`. App ID: `nz.harbour.weather`; version: `0.4.0`, version code `4`. Confirm the app ID before distributing a release; keep it stable for subsequent updates.
+The native project is in `android/`. App ID: `nz.harbour.weather`; version: `0.5.0`, version code `5`. Confirm the app ID before distributing a release; keep it stable for subsequent updates.
 
 **GitHub build:** every relevant push to `main` runs **Build Android APK**. Successful debug builds are published by **Publish Android download** as [GitHub prerelease APK downloads](https://github.com/dazzlingfields/harbour-weather/releases), with SHA-256 checksums. You can also download the `harbour-android-debug` Actions artifact (retained for 30 days). These APKs are intended for testing. A debug build is signed with the runner's temporary debug key; later debug builds may need the previous install removed. Export markers first.
 

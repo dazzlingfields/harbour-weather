@@ -9,7 +9,7 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         String agent = bridge.getWebView().getSettings().getUserAgentString();
-        bridge.getWebView().getSettings().setUserAgentString(agent + " Harbour/0.3 (+https://github.com/dazzlingfields/harbour-weather)");
+        bridge.getWebView().getSettings().setUserAgentString(agent + " Harbour/0.5 (+https://github.com/dazzlingfields/harbour-weather)");
         // Close sheets and dialogs before Android Back leaves the app.
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
             @Override
