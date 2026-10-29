@@ -3,7 +3,7 @@
   "appName": "Harbour",
   "webDir": "dist",
   "android": {
-    "backgroundColor": "#f8f7f2"
+    "backgroundColor": "#ffffff"
   },
   "plugins": {
     "SystemBars": {
