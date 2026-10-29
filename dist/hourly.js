@@ -26,7 +26,7 @@ export function hourlyTable(rows,{unit='kn',settings={unit},more=false,selected=
   if(!rows.length)return '<p class="empty-state">No forecast hours available. Try refreshing.</p>';
   const groups=dateGroups(rows),starts=new Set(groups.map(g=>g.index));
   const cellClass=(r,i,key)=>[starts.has(i)?'day-boundary':'',selected===r.ts?'selected-hour':'',key==='wind'||key==='gust'?intensity(r[key],'wind'):key==='wave'||key==='swell'?intensity(r[key],'wave'):key==='rain'?intensity(r[key],'rain'):''].filter(Boolean).join(' ');
-  const arrow=n=>finite(n)?`<span class="bearing-arrow" style="transform:rotate(${n+180}deg)" aria-hidden="true">↑</span>`:'';
+  const arrow=n=>finite(n)?`<span class="bearing-arrow" style="transform:rotate(${n}deg)" aria-hidden="true">↑</span>`:'';
   const fields=[
     ['wind','Wind',unitLabel('speed',settings),r=>formatValue(r.wind,'speed',settings)],
     ['gust','Gusts',unitLabel('speed',settings),r=>formatValue(r.gust,'speed',settings)],
